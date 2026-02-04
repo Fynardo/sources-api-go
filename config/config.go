@@ -69,6 +69,11 @@ type SourcesApiConfig struct {
 	SecretsManagerSecretKey string
 	SecretsManagerPrefix    string
 	LocalStackURL           string
+
+	// Superkey configuration
+	SuperkeyAWSWaitTime     int  // IAM race condition delay in seconds
+	SuperkeyDisableCreation bool // Disable superkey resource creation (for testing)
+	SuperkeyDisableDeletion bool // Disable superkey resource deletion (for testing)
 }
 
 // String() returns a string that shows the settings in which the pod is running in
@@ -284,6 +289,15 @@ func Get() *SourcesApiConfig {
 
 	options.SetDefault("TenantTranslatorUrl", os.Getenv("TENANT_TRANSLATOR_URL"))
 
+	// Superkey configuration
+	superkeyWaitTime, _ := strconv.Atoi(os.Getenv("SUPERKEY_AWS_WAIT_TIME"))
+	if superkeyWaitTime == 0 {
+		superkeyWaitTime = 7 // default wait time
+	}
+	options.SetDefault("SuperkeyAWSWaitTime", superkeyWaitTime)
+	options.SetDefault("SuperkeyDisableCreation", os.Getenv("SUPERKEY_DISABLE_CREATION") == "true")
+	options.SetDefault("SuperkeyDisableDeletion", os.Getenv("SUPERKEY_DISABLE_DELETION") == "true")
+
 	// Parse any Flags (using our own flag set to not conflict with the global flag)
 	fs := flag.NewFlagSet("runtime", flag.ContinueOnError)
 	availabilityListener := fs.Bool("listener", false, "run availability status listener")
@@ -378,6 +392,9 @@ func Get() *SourcesApiConfig {
 		SecretsManagerPrefix:     options.GetString("SecretsManagerPrefix"),
 		LocalStackURL:            options.GetString("LocalStackURL"),
 		RbacHost:                 options.GetString("RbacHost"),
+		SuperkeyAWSWaitTime:      options.GetInt("SuperkeyAWSWaitTime"),
+		SuperkeyDisableCreation:  options.GetBool("SuperkeyDisableCreation"),
+		SuperkeyDisableDeletion:  options.GetBool("SuperkeyDisableDeletion"),
 	}
 
 	return parsedConfig
