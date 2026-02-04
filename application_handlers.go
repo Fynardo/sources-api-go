@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/RedHatInsights/sources-api-go/dao"
+	"github.com/RedHatInsights/sources-api-go/jobs"
 	m "github.com/RedHatInsights/sources-api-go/model"
 	"github.com/RedHatInsights/sources-api-go/service"
 	"github.com/RedHatInsights/sources-api-go/util"
@@ -123,23 +124,22 @@ func ApplicationCreate(c echo.Context) error {
 	application.Tenant = m.Tenant{Id: application.TenantID, ExternalTenant: accountNumber}
 	setEventStreamResource(c, application)
 
-	// do not raise if it is a superkey application. The worker will post back
-	// with the resources and then we raise the create event.
+	// For superkey applications, enqueue a job to create resources
+	// The job will raise the create event after resources are created
 	if applicationDB.IsSuperkey(application.ID) {
-		c.Set("skip_raise", true)
-
 		forwardableHeaders, err := service.ForwadableHeaders(c)
 		if err != nil {
 			return err
 		}
 
-		// do the rest async. Don't want to be tied to kafka.
-		go func() {
-			err := service.SendSuperKeyCreateRequest(application, forwardableHeaders)
-			if err != nil {
-				c.Logger().Warnf("Error sending Superkey Create Request: %v", err)
-			}
-		}()
+		tenantID := c.Get("tenantID").(*int64)
+
+		// Enqueue background job to create superkey resources
+		jobs.Enqueue(&jobs.SuperkeyCreateJob{
+			ApplicationID: application.ID,
+			Tenant:        *tenantID,
+			Headers:       forwardableHeaders,
+		})
 	}
 
 	return c.JSON(http.StatusCreated, application.ToResponse())
